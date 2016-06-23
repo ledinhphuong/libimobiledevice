@@ -28,7 +28,8 @@ libimobiledevice_la_SOURCES = idevice.c idevice.h \
 		       heartbeat.c heartbeat.h\
 		       debugserver.c debugserver.h\
 		       webinspector.c webinspector.h\
-		       syslog_relay.c syslog_relay.h
+		       syslog_relay.c syslog_relay.h\
+					 xcuitest.c xcuitest.h
 
 if WIN32
 libimobiledevice_la_LDFLAGS += -avoid-version
