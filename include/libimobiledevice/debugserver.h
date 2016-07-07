@@ -30,7 +30,12 @@ extern "C" {
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
 
-#define DEBUGSERVER_SERVICE_NAME "com.apple.debugserver"
+// #define DEBUGSERVER_SERVICE_NAME "com.apple.debugserver" // ok
+// #define DEBUGSERVER_SERVICE_NAME "com.apple.instruments.remoteserver" // ok
+// #define DEBUGSERVER_SERVICE_NAME "com.apple.instruments.server.services.processcontrol" // failed
+// #define DEBUGSERVER_SERVICE_NAME "com.apple.instruments.DTXConnectionServices" // failed
+// #define DEBUGSERVER_SERVICE_NAME "com.apple.dt.xcodedevicemonitor" // failed
+#define DEBUGSERVER_SERVICE_NAME "com.apple.testmanagerd.lockdown" // ok
 
 /** Error Codes */
 typedef enum {

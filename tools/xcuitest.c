@@ -11,240 +11,231 @@
 #include <unistd.h>
 
 #include <libimobiledevice/libimobiledevice.h>
-#include <libimobiledevice/lockdown.h>
 #include <libimobiledevice/xcuitest.h>
-#include <libimobiledevice/installation_proxy.h>
-#include <plist/plist.h>
+
+#include "common/utils.h"
+#include "common/socket.h"
 
 #ifdef WIN32
 #include <windows.h>
 #define sleep(x) Sleep(x*1000)
 #endif
 
-// typedef enum {
-// 	SCREENSHOTR_E_SUCCESS       =  0,
-// 	SCREENSHOTR_E_INVALID_ARG   = -1,
-// 	SCREENSHOTR_E_PLIST_ERROR   = -2,
-// 	SCREENSHOTR_E_MUX_ERROR     = -3,
-// 	SCREENSHOTR_E_BAD_VERSION   = -4,
-// 	SCREENSHOTR_E_UNKNOWN_ERROR = -256
-// } screenshotr_error_t;
-// struct screenshotr_client_private {
-// 	device_link_service_client_t parent;
-// };
-// typedef screenshotr_client_private *screenshotr_client_t;
-
 static int quit_flag = 0;
+static int testmanagerdSocket = -1;
 
 /**
-* signal handler function for cleaning up properly
-*/
+ * signal handler function for cleaning up properly
+ */
 static void on_signal(int sig) {
   fprintf(stderr, "Exiting...\n");
   quit_flag++;
+  if (testmanagerdSocket > 0) {
+    socket_close(testmanagerdSocket);
+    testmanagerdSocket = -1;
+  }
 }
 
-// static screenshotr_error_t screenshotr_error(device_link_service_error_t err)
-// {
-// 	switch (err) {
-// 		case DEVICE_LINK_SERVICE_E_SUCCESS:
-// 			return SCREENSHOTR_E_SUCCESS;
-// 		case DEVICE_LINK_SERVICE_E_INVALID_ARG:
-// 			return SCREENSHOTR_E_INVALID_ARG;
-// 		case DEVICE_LINK_SERVICE_E_PLIST_ERROR:
-// 			return SCREENSHOTR_E_PLIST_ERROR;
-// 		case DEVICE_LINK_SERVICE_E_MUX_ERROR:
-// 			return SCREENSHOTR_E_MUX_ERROR;
-// 		case DEVICE_LINK_SERVICE_E_BAD_VERSION:
-// 			return SCREENSHOTR_E_BAD_VERSION;
-// 		default:
-// 			break;
-// 	}
-// 	return SCREENSHOTR_E_UNKNOWN_ERROR;
-// }
-//
-// screenshotr_error_t instruments_client_new(idevice_t device, lockdownd_service_descriptor_t service,
-// 					   screenshotr_client_t * client)
-// {
-// 	if (!device || !service || service->port == 0 || !client || *client)
-// 		return SCREENSHOTR_E_INVALID_ARG;
-//
-// 	device_link_service_client_t dlclient = NULL;
-// 	screenshotr_error_t ret = screenshotr_error(device_link_service_client_new(device, service, &dlclient));
-// 	if (ret != SCREENSHOTR_E_SUCCESS) {
-// 		return ret;
-// 	}
-//
-// 	screenshotr_client_t client_loc = (screenshotr_client_t) malloc(sizeof(struct screenshotr_client_private));
-// 	client_loc->parent = dlclient;
-//
-// 	/* perform handshake */
-// 	ret = screenshotr_error(device_link_service_version_exchange(dlclient, SCREENSHOTR_VERSION_INT1, SCREENSHOTR_VERSION_INT2));
-// 	if (ret != SCREENSHOTR_E_SUCCESS) {
-// 		debug_info("version exchange failed, error %d", ret);
-// 		screenshotr_client_free(client_loc);
-// 		return ret;
-// 	}
-//
-// 	*client = client_loc;
-//
-// 	return ret;
-// }
+void print_usage(int argc, char **argv) {
+  char *name = NULL;
 
-void print_usage(int argc, char **argv);
+  name = strrchr(argv[0], '/');
+  printf("Usage: %s [OPTIONS] PORT\n", (name ? name + 1: argv[0]));
+  printf("Run Xcode UI tests on real device.\n");
+  printf("  -d, --debug\t\tEnable communication debugging\n");
+  printf("  -u, --udid UDID\tTarget specific device by its 40-digit device UDID\n");
+  printf("  -r, --run PATH\tRun (debug) app specified by on-device path (use ideviceinstaller -l -o xml to find it).\n");
+  printf("  -b, --bundle\t\tBundle ID for app to start.\n");
+  printf("  -s, --session\t\tSession ID of test bundle.\n");
+  printf("  -h, --help\t\tPrints usage information\n");
+  printf("  PORT, \t\tPort of testmanagerd proxy\n");
+  printf("\n");
+  printf("Homepage: <" PACKAGE_URL ">\n");
+}
+
 int main(int argc, char **argv) {
-	signal(SIGINT, on_signal);
+  signal(SIGINT, on_signal);
   signal(SIGTERM, on_signal);
 
-	int result = -1;
-	int i;
-	const char *udid = NULL;
-	const char *bundle = NULL;
-	const char *session = NULL;
+  int result = -1;
+  int i;
 
+  const char *udid = NULL;
+  const char *bundle = NULL;
+  const char *session = NULL;
   char *appPath = NULL;
-  idevice_t device = NULL;
-  lockdownd_error_t ldret = LOCKDOWN_E_UNKNOWN_ERROR;
-  instproxy_client_t instproxy_client = NULL;
-  lockdownd_client_t lckd = NULL;
-  lockdownd_service_descriptor_t service = NULL;
-  // screenshotr_client_t shotr = NULL;
 
-	/* parse cmdline args */
-	for (i = 1; i < argc; i++) {
-		if (!strcmp(argv[i], "-d") || !strcmp(argv[i], "--debug")) {
-			idevice_set_debug_level(1);
-			continue;
-		}
-		else if (!strcmp(argv[i], "-u") || !strcmp(argv[i], "--udid")) {
-			i++;
-			if (!argv[i] || (strlen(argv[i]) != 40)) {
-				print_usage(argc, argv);
-				return 0;
-			}
-			udid = argv[i];
-			continue;
-		}
-		else if (!strcmp(argv[i], "-b") || !strcmp(argv[i], "--bundle")) {
-      i++;
-			if (!argv[i]) {
-				print_usage(argc, argv);
-				return 0;
-			}
-			bundle = argv[i];
-			continue;
-		}
-		else if (!strcmp(argv[i], "-s") || !strcmp(argv[i], "--session")) {
-      i++;
-			if (!argv[i]) {
-				print_usage(argc, argv);
-				return 0;
-			}
-			session = argv[i];
-			continue;
-		}
-		else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
-			print_usage(argc, argv);
-			return 0;
-		}
-		else {
-			print_usage(argc, argv);
-			return 0;
-		}
-	}
+  const char *testmanagerdAddr = "localhost";
+  int testmanagerdPort = 0;
+  int plistMaxSz = 1024*1024; // 1mb
+  char *plistBuffer = NULL;
+  char *chunk = NULL;
 
-  if (!udid || !bundle || !session) {
-    print_usage(argc, argv);
-    return 0;
+  // parse cmdline args
+  for (i = 1; i < argc; i++) {
+    if (!strcmp(argv[i], "-d") || !strcmp(argv[i], "--debug")) {
+      idevice_set_debug_level(1);
+      continue;
+    }
+    else if (!strcmp(argv[i], "-u") || !strcmp(argv[i], "--udid")) {
+      i++;
+      if (!argv[i] || (strlen(argv[i]) != 40)) {
+        print_usage(argc, argv);
+        return 0;
+      }
+      udid = argv[i];
+      continue;
+    }
+    else if (!strcmp(argv[i], "-b") || !strcmp(argv[i], "--bundle")) {
+      i++;
+      if (!argv[i]) {
+        print_usage(argc, argv);
+        return 0;
+      }
+      bundle = argv[i];
+      continue;
+    }
+    else if (!strcmp(argv[i], "-s") || !strcmp(argv[i], "--session")) {
+      i++;
+      if (!argv[i]) {
+        print_usage(argc, argv);
+        return 0;
+      }
+      session = argv[i];
+      continue;
+    }
+    else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
+      print_usage(argc, argv);
+      return 0;
+    }
+    else if (atoi(argv[i]) > 0) {
+      testmanagerdPort = atoi(argv[i]);
+      continue;
+    }
+    else {
+      print_usage(argc, argv);
+      return 0;
+    }
   }
 
-  // connect to device
-  if (IDEVICE_E_SUCCESS != idevice_new(&device, udid)) {
-		if (udid) {
-			printf("No device found with udid %s, is it plugged in?\n", udid);
-		} else {
-			printf("No device found, is it plugged in?\n");
-		}
-		goto cleanup;
-	}
-
-  // install app to device
-  // - use ideviceinstaller
-
-  // launch/relaunch app and get pid
-  if (instproxy_client_start_service(device, &instproxy_client, "idevicerun") != INSTPROXY_E_SUCCESS) {
-    fprintf(stderr, "Could not start installation proxy service.\n");
+  // PORT is mandatory
+  if (!testmanagerdPort) {
+    fprintf(stderr, "Please specify a PORT.\n");
+    print_usage(argc, argv);
     goto cleanup;
   }
 
-  instproxy_client_get_path_for_bundle_identifier(instproxy_client, bundle, &appPath);
-  printf("appPath=%s\n", appPath);
-  instproxy_client_free(instproxy_client);
-  instproxy_client = NULL;
+  // connect to testmanagerd proxy
+  if ((testmanagerdSocket = socket_connect(testmanagerdAddr, testmanagerdPort)) <= 0) {
+    printf("Cannot establish tcp connection to testmanagerd\n");
+    return -1;
+  }
 
-  // connect to com.apple.instruments.remoteserver
-  if (LOCKDOWN_E_SUCCESS != (ldret = lockdownd_client_new_with_handshake(device, &lckd, NULL))) {
-		idevice_free(device);
-		printf("ERROR: Could not connect to lockdownd, error code %d\n", ldret);
-		goto cleanup;
-	}
+  printf("Connected to testmanagerd proxy at %d\n", testmanagerdPort);
 
-  lockdownd_start_service(lckd, "com.apple.instruments.remoteserver", &service);
-	lockdownd_client_free(lckd);
-	if (service && service->port > 0) {
-    printf("com.apple.instruments.remoteserver is started at port=%d\n", service->port);
+  // repaire memory for plist
+  // plistBuffer = malloc(plistMaxSz);
+  // memset(plistBuffer, 0, plistMaxSz);
 
-    // if (screenshotr_client_new(device, service, &shotr) != SCREENSHOTR_E_SUCCESS) {
-    //   printf("Could not connect to instruments!\n");
+  // convert plist binary to xml
+  // const char *in = "/Users/phuongdle/MyProjects/org/libimobiledevice/2.bin";
+  // const char *out = "/Users/phuongdle/MyProjects/org/libimobiledevice/out.xml";
+  // plist_t plist = NULL;
+  // plist_read_from_filename(plist, in);//plist_new_dict();
+  // if (plist)
+  //   printf("Can read plist\n");
+  // else
+  //   printf("Cannot read plist\n");
+  // remove(out);
+  // plist_write_to_filename(plist, out, PLIST_FORMAT_XML);
+  // plist_free(plist);
+
+  // create simple plist file
+  // plist_t plist = plist_new_dict();
+  // if (plist)
+  //   printf("Created plist\n");
+  // else
+  //   printf("Cannot create plist\n");
+  // plist_dict_set_item(plist, "GUID", plist_new_string("---"));
+  // plist_dict_set_item(plist, "iTunes Version", plist_new_string("10.0.1"));
+  //
+  // remove(out2);
+  // plist_write_to_filename(plist, out2, PLIST_FORMAT_XML);
+  // plist_free(plist);
+  ////////////////////
+
+  int chunkSz = 1024*1024;
+  chunk = malloc(chunkSz);
+  memset(chunk, 0, chunkSz);
+
+  // wait for exit signal
+  int n = 0;
+  while (!quit_flag) {
+    // sleep(1);
+
+    // receive chunk
+    int readSize = 0;
+    memset(chunk, 0, chunkSz);
+    if ((readSize = read(testmanagerdSocket, chunk, chunkSz-1)) > 0) {
+      printf(">>>>>>>> chunk size: %d\n", readSize);
+      chunk[readSize] = '\0';
+
+      fwrite(chunk, readSize, 1, stdout);
+      printf("\n");
+
+      // parse plist package
+      // 32-bit big endian
+      uint32_t plistLen = 0;
+
+      //https://www.theiphonewiki.com/wiki/Usbmux
+      if (readSize > 4) {
+        plistLen = (chunk[3]<<24)|(chunk[2]<<16)|(chunk[1]<<8)|chunk[0];
+        // memcpy(&plistLen, chunk, 4);
+        printf("plistLen: %d\n", plistLen);
+
+        // if (plistLen <= readSize-4) {
+        //   printf("Parsing plist...\n");
+        //
+        //   plist_t dict = NULL;
+        //   plist_from_bin(chunk+4, plistLen, dict);
+        //
+        //   if (dict) {
+        //     printf("Got plist\n");
+        //
+        //     char *version = NULL;
+        //   	plist_t node = plist_dict_get_item(dict, "version");
+        //   	if (node && (plist_get_node_type(node) == PLIST_STRING)) {
+        //   		plist_get_string_val(node, &version);
+        //       printf(">>>> version: %s\n", version);
+        //   	}
+        //
+        //     plist_free(dict);
+        //   }
+        // }
+      }
+    }
+
+    //
+    //   char name[8];
+    //   memset(name, 0, 8);
+    //   sprintf(name, "%d.bin", ++n);
+    //   char *path = string_build_path("/Users/phuongdle/MyProjects/org/libimobiledevice", name, NULL);
+    //   remove(path);
+    //   buffer_write_to_filename(path, chunk, readSize);
+    //   free(path);
+    //
+    //
+    // }
+    // else {
+    //   sleep(1);
     // }
   }
 
-
-  // create DVTDevice
-
-
-  // create DTXTransport
-
-
-  // create DTXProxyChannel
-
-
-  // create XCTestManager_DaemonConnectionInterface
-
-
-  // create DTXRemoteInvocationReceipt
-
-
-  // wait for exit signal
-  printf("Entering run loop...\n");
-  while (!quit_flag) {
-    printf("Running\n");
-		sleep(1);
-  }
-
 cleanup:
-  // if (shotr) screenshotr_client_free(shotr);
-  if (service) lockdownd_service_descriptor_free(service);
-  if (device) idevice_free(device);
+  if (plistBuffer) free(plistBuffer);
+  if (chunk) free(chunk);
   if (appPath) free(appPath);
-	printf("Finish.\n");
+  printf("Stopped.\n");
 
-	return result;
-}
-
-void print_usage(int argc, char **argv)
-{
-	char *name = NULL;
-
-	name = strrchr(argv[0], '/');
-	printf("Usage: %s OPTIONS\n", (name ? name + 1: argv[0]));
-	printf("Run Xcode UI tests on real device.\n");
-	printf("  -d, --debug\t\tEnable communication debugging\n");
-	printf("  -u, --udid UDID\tTarget specific device by its 40-digit device UDID\n");
-	printf("  -r, --run PATH\tRun (debug) app specified by on-device path (use ideviceinstaller -l -o xml to find it).\n");
-	printf("  -b, --bundle\t\tBundle ID for app to start.\n");
-	printf("  -s, --session\t\tSession ID of test bundle.\n");
-	printf("  -h, --help\t\tPrints usage information\n");
-	printf("\n");
-	printf("Homepage: <" PACKAGE_URL ">\n");
+  return result;
 }
