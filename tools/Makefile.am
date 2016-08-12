@@ -3,7 +3,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)
 AM_CFLAGS = $(GLOBAL_CFLAGS) $(libgnutls_CFLAGS) $(libtasn1_CFLAGS) $(libgcrypt_CFLAGS) $(openssl_CFLAGS) $(libplist_CFLAGS) $(LFS_CFLAGS)
 AM_LDFLAGS = $(libgnutls_LIBS) $(libtasn1_LIBS) $(libgcrypt_LIBS) $(openssl_LIBS) $(libplist_LIBS)
 
-bin_PROGRAMS = idevice_id ideviceinfo idevicename idevicepair idevicesyslog ideviceimagemounter idevicescreenshot ideviceenterrecovery idevicedate idevicebackup idevicebackup2 ideviceprovision idevicedebugserverproxy idevicediagnostics idevicedebug idevicenotificationproxy idevicecrashreport xcuitest
+bin_PROGRAMS = idevice_id ideviceinfo idevicename idevicepair idevicesyslog ideviceimagemounter idevicescreenshot ideviceenterrecovery idevicedate idevicebackup idevicebackup2 ideviceprovision idevicedebugserverproxy idevicediagnostics idevicedebug idevicenotificationproxy idevicecrashreport kobiscreenshot
 
 ideviceinfo_SOURCES = ideviceinfo.c
 ideviceinfo_CFLAGS = $(AM_CFLAGS)
@@ -90,7 +90,7 @@ idevicecrashreport_CFLAGS = -I$(top_srcdir) $(AM_CFLAGS)
 idevicecrashreport_LDFLAGS = $(top_builddir)/common/libinternalcommon.la $(AM_LDFLAGS)
 idevicecrashreport_LDADD = $(top_builddir)/src/libimobiledevice.la
 
-xcuitest_SOURCES = xcuitest.c
-xcuitest_CFLAGS = -I$(top_srcdir) $(AM_CFLAGS)
-xcuitest_LDFLAGS = $(top_builddir)/common/libinternalcommon.la $(AM_LDFLAGS)
-xcuitest_LDADD = $(top_builddir)/src/libimobiledevice.la
+kobiscreenshot_SOURCES = kobiscreenshot.c
+kobiscreenshot_CFLAGS = -I$(top_srcdir) $(AM_CFLAGS)
+kobiscreenshot_LDFLAGS = $(top_builddir)/common/libinternalcommon.la $(AM_LDFLAGS)
+kobiscreenshot_LDADD = $(top_builddir)/src/libimobiledevice.la

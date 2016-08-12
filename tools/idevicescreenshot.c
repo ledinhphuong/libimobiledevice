@@ -28,10 +28,17 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <time.h>
+#include <signal.h>
+#include <unistd.h>
 
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
 #include <libimobiledevice/screenshotr.h>
+
+#ifdef WIN32
+#include <windows.h>
+#define sleep(x) Sleep(x*1000)
+#endif
 
 void print_usage(int argc, char **argv);
 
@@ -104,7 +111,23 @@ int main(int argc, char **argv)
 				filename = (char*)malloc(36);
 				strftime(filename, 36, "screenshot-%Y-%m-%d-%H-%M-%S.tiff", gmtime(&now));
 			}
-			if (screenshotr_take_screenshot(shotr, &imgdata, &imgsize) == SCREENSHOTR_E_SUCCESS) {
+
+			int ret = 0;
+			// time
+			// time_t start, stop;
+			// time(&start);
+			// ret = (screenshotr_take_screenshot(shotr, &imgdata, &imgsize) == SCREENSHOTR_E_SUCCESS);
+			// time(&stop);
+			// printf("Time to capture screenshot 1: %.0f millisecs\n", difftime(stop, start)*1000);
+
+			// cpu time
+			clock_t begin, end;
+			begin = clock();
+			ret = (screenshotr_take_screenshot(shotr, &imgdata, &imgsize) == SCREENSHOTR_E_SUCCESS);
+			end = clock();
+			printf("Time to capture screenshot 2: %.0f millisecs\n", (double)((end - begin)*1000/CLOCKS_PER_SEC));
+
+			if (ret) {
 				FILE *f = fopen(filename, "wb");
 				if (f) {
 					if (fwrite(imgdata, 1, (size_t)imgsize, f) == (size_t)imgsize) {

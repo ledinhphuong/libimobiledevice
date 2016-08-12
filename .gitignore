@@ -53,7 +53,7 @@ tools/ideviceprovision
 tools/idevicecrashreport
 tools/idevicedebug
 tools/idevicenotificationproxy
-tools/xcuitest
+tools/kobiscreenshot
 cython/.libs/*
 cython/*.c
 doxygen.cfg

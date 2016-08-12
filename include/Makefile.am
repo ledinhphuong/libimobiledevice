@@ -22,4 +22,4 @@ nobase_include_HEADERS = libimobiledevice/libimobiledevice.h \
 			 libimobiledevice/syslog_relay.h\
 			 libimobiledevice/property_list_service.h\
 			 libimobiledevice/service.h\
-			 libimobiledevice/xcuitest.h
+			 libimobiledevice/kobiscreenshot.h

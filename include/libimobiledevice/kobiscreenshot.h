@@ -1,5 +1,5 @@
-#ifndef XCUITEST_H
-#define XCUITEST_H
+#ifndef KOBISCREENSHOT_H
+#define KOBISCREENSHOT_H
 
 #ifdef __cplusplus
 extern "C" {
